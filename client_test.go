@@ -16,7 +16,7 @@ const (
 )
 
 func TestSuccessfulResponse(t *testing.T) {
-	ts := createTestServer(t)
+	ts := createTestServer()
 	defer ts.Close()
 
 	c := NewHttpClient(http.Client{})
@@ -87,7 +87,7 @@ func TestRequestRetry(t *testing.T) {
 }
 
 func TestRequestTimeout(t *testing.T) {
-	ts := createTestServer(t)
+	ts := createTestServer()
 	defer ts.Close()
 
 	c := NewHttpClient(http.Client{}, WithTimeout(time.Second))
@@ -100,7 +100,7 @@ func TestRequestTimeout(t *testing.T) {
 }
 
 func TestResponseDataUncompression(t *testing.T) {
-	ts := createTestServer(t)
+	ts := createTestServer()
 	defer ts.Close()
 
 	c := NewHttpClient(http.Client{})

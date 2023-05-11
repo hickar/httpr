@@ -105,7 +105,11 @@ func DoGetRequest(requestURL string) (Response, error) {
 }
 
 func DoGetRequestWithRetry(requestURL string) (Response, error) {
-	req, _ := http.NewRequest(http.MethodGet, requestURL, nil)
+	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	return DoRequestWithRetry(context.Background(), DefaultClient(), req, CompressionNone)
 }
 

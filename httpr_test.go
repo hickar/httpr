@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func handleTest(w http.ResponseWriter, req *http.Request) {
+func handleTest(w http.ResponseWriter) {
 	_, _ = w.Write([]byte(fmt.Sprintf(`{"msg": "%s"}`, _testMsg)))
 	w.WriteHeader(http.StatusOK)
 }
@@ -72,35 +72,12 @@ func handleTestCompressed(compression string) http.HandlerFunc {
 	}
 }
 
-func handleTestTarCompressed(w http.ResponseWriter, req *http.Request) {
-	var (
-		respData = []byte(fmt.Sprintf(`{"msg": "%s"}`, _testMsg))
-		tw       = tar.NewWriter(w)
-	)
-
-	_, err := tw.Write(respData)
-	if err != nil {
-		panic(err)
-	}
-	defer func(tw *tar.Writer) {
-		if err := tw.Close(); err != nil {
-			panic(err)
-		}
-	}(tw)
-
-	w.WriteHeader(http.StatusOK)
-	flusher, ok := w.(http.Flusher)
-	if ok {
-		flusher.Flush()
-	}
-}
-
-func createTestServer(t *testing.T) *httptest.Server {
+func createTestServer() *httptest.Server {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.Method == http.MethodGet {
 			switch req.URL.Path {
 			case "/test":
-				handleTest(w, req)
+				handleTest(w)
 			case "/timeout":
 				handleTestTimeout(w, req)
 			case "/gzip-compressed":

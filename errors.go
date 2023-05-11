@@ -1,27 +1,28 @@
 package httpr
 
 import (
+	"errors"
 	"fmt"
 )
 
-type RespErr struct {
+type ResponseError struct {
 	Msg  string
 	Code int
 }
 
-func (e *RespErr) Error() string {
+func (e *ResponseError) Error() string {
 	return fmt.Sprintf("got HTTP error code '%d': %s", e.Code, e.Msg)
 }
 
-func (e *RespErr) Is(target error) bool {
-	t, ok := target.(*RespErr)
-	if !ok {
+func (e *ResponseError) Is(target error) bool {
+	var respErr *ResponseError
+	if ok := errors.As(target, &respErr); !ok {
 		return false
 	}
 
-	return e.Code == t.Code
+	return e.Code == respErr.Code
 }
 
 func newResponseError(msg string, code int) error {
-	return &RespErr{Msg: msg, Code: code}
+	return &ResponseError{Msg: msg, Code: code}
 }

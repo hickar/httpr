@@ -55,8 +55,10 @@ func defaultClientSettings() *clientSettings {
 
 type Option func(settings *clientSettings)
 
-var _ Limiter = (*unlimitedLimiter)(nil)
-var _ Response = (*ClientResponse)(nil)
+var (
+	_ Limiter  = (*unlimitedLimiter)(nil)
+	_ Response = (*ClientResponse)(nil)
+)
 
 type RetryConditionFunc func(response *Response) bool
 
@@ -142,8 +144,7 @@ type Client interface {
 }
 
 type client struct {
-	client    *http.Client
-	transport *http.Transport
+	client *http.Client
 
 	PreRequestHookFn PreRequestHookFn
 	RetryCount       int
@@ -215,7 +216,7 @@ func (c *client) Do(req *http.Request) (Response, error) {
 			}
 		}
 
-		return lastResp, fmt.Errorf("failed to send request after %d attempt(s): %v", c.RetryCount, retryErr)
+		return lastResp, fmt.Errorf("failed to send request after %d attempt(s): %w", c.RetryCount, retryErr)
 	}
 
 	return retryFunc()
@@ -264,7 +265,7 @@ func doRequest(httpClient *http.Client, req *http.Request) (r *ClientResponse, e
 	if err != nil {
 		return r, err
 	}
-	defer func(body io.ReadCloser) {
+	defer func(body io.Closer) {
 		closeErr := body.Close()
 		if closeErr != nil {
 			err = closeErr
@@ -273,7 +274,7 @@ func doRequest(httpClient *http.Client, req *http.Request) (r *ClientResponse, e
 
 	reader, err := wrapWithCompressionReader(r.rawResp, req)
 	if err != nil {
-		return r, fmt.Errorf("unable to wrap response in compression reader: %v", err)
+		return r, fmt.Errorf("unable to wrap response in compression reader: %w", err)
 	}
 	closer, ok := reader.(io.Closer)
 	if ok {
@@ -287,14 +288,14 @@ func doRequest(httpClient *http.Client, req *http.Request) (r *ClientResponse, e
 
 	r.body, err = io.ReadAll(reader)
 	if err != nil {
-		return r, fmt.Errorf("failed to read response bytes: %v", err)
+		return r, fmt.Errorf("failed to read response bytes: %w", err)
 	}
 
 	if Is4xx(r.rawResp.StatusCode) || Is5xx(r.rawResp.StatusCode) {
 		return r, newResponseError("got http response error code", r.rawResp.StatusCode)
 	}
 
-	return
+	return r, nil
 }
 
 func wrapWithCompressionReader(resp *http.Response, req *http.Request) (io.Reader, error) {

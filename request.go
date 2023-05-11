@@ -13,7 +13,6 @@ const (
 )
 
 type RequestBuilder struct {
-	req http.Request
 	err error
 
 	ctx     context.Context
