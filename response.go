@@ -6,22 +6,12 @@ import (
 	"net/http"
 )
 
-type Response interface {
-	Bytes() []byte
-	Reader() io.Reader
-	String() string
-	StatusCode() int
-	Headers() map[string]string
-	Cookies() []*http.Cookie
-	RequestURL() string
-}
-
-type ClientResponse struct {
+type Response struct {
 	rawResp *http.Response
 	body    []byte
 }
 
-func (r *ClientResponse) Bytes() []byte {
+func (r *Response) Bytes() []byte {
 	if r == nil || r.rawResp == nil || r.body == nil {
 		return []byte{}
 	}
@@ -29,7 +19,7 @@ func (r *ClientResponse) Bytes() []byte {
 	return r.body
 }
 
-func (r *ClientResponse) Reader() io.Reader {
+func (r *Response) Reader() io.Reader {
 	if r.rawResp == nil {
 		return bytes.NewReader([]byte{})
 	}
@@ -37,11 +27,11 @@ func (r *ClientResponse) Reader() io.Reader {
 	return bytes.NewReader(r.body)
 }
 
-func (r *ClientResponse) String() string {
+func (r *Response) String() string {
 	return string(r.Bytes())
 }
 
-func (r *ClientResponse) StatusCode() int {
+func (r *Response) StatusCode() int {
 	if r.rawResp == nil {
 		return 0
 	}
@@ -49,7 +39,7 @@ func (r *ClientResponse) StatusCode() int {
 	return r.rawResp.StatusCode
 }
 
-func (r *ClientResponse) Headers() map[string]string {
+func (r *Response) Headers() map[string]string {
 	headers := make(map[string]string)
 	if r.rawResp == nil {
 		return headers
@@ -61,7 +51,7 @@ func (r *ClientResponse) Headers() map[string]string {
 	return headers
 }
 
-func (r *ClientResponse) Cookies() []*http.Cookie {
+func (r *Response) Cookies() []*http.Cookie {
 	if r.rawResp == nil {
 		return nil
 	}
@@ -69,7 +59,7 @@ func (r *ClientResponse) Cookies() []*http.Cookie {
 	return r.rawResp.Cookies()
 }
 
-func (r *ClientResponse) RequestURL() string {
+func (r *Response) RequestURL() string {
 	if r == nil || r.rawResp == nil {
 		return ""
 	}
