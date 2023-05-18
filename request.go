@@ -78,6 +78,10 @@ func (rb *RequestBuilder) SetHeaders(headers map[string]string) *RequestBuilder 
 	return rb
 }
 
+func (rb *RequestBuilder) SetQueryParams() *RequestBuilder {
+	return rb
+}
+
 func (rb *RequestBuilder) SetAcceptType(typeName string) *RequestBuilder {
 	rb.SetHeader(AcceptHeader, getMimeType(typeName))
 	return rb

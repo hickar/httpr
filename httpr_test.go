@@ -19,7 +19,7 @@ func handleTest(w http.ResponseWriter) {
 
 func handleTestTimeout(w http.ResponseWriter, req *http.Request) {
 	select {
-	case <-time.After(time.Minute):
+	case <-time.After(time.Second * 10):
 	case <-req.Context().Done():
 	}
 

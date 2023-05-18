@@ -19,7 +19,7 @@ func TestSuccessfulResponse(t *testing.T) {
 	ts := createTestServer()
 	defer ts.Close()
 
-	c := New(http.Client{})
+	c := New()
 	resp, err := c.Get(context.Background(), ts.URL+"/test")
 	if err != nil {
 		t.Fatalf("expected no error, but got error '%v'", err)
@@ -58,15 +58,19 @@ func TestRequestRetry(t *testing.T) {
 	defer ts.Close()
 
 	c := New(
-		http.Client{},
 		WithRetryCount(expectedRetryCount),
 		WithRetryDelay(0),
+		WithRetryCondition(func(response *Response, err error) bool {
+			return response.StatusCode() == http.StatusInternalServerError
+		}),
 	)
-	_, err := c.Get(context.Background(), ts.URL+"/test")
-	if err == nil {
-		t.Errorf("expected non-nil error, got %v", err)
+	resp, err := c.Get(context.Background(), ts.URL+"/test")
+	if err != nil {
+		t.Errorf("expected nil error, got %v", err)
 	}
-
+	if resp.StatusCode() != http.StatusInternalServerError {
+		t.Errorf("expected status code %d, got %d instead", http.StatusInternalServerError, resp.StatusCode())
+	}
 	if actualRetryCount != expectedRetryCount {
 		t.Errorf("expected != actual, %d != %d", actualRetryCount, expectedRetryCount)
 	}
@@ -76,9 +80,12 @@ func TestRequestTimeout(t *testing.T) {
 	ts := createTestServer()
 	defer ts.Close()
 
-	c := New(http.Client{}, WithTimeout(time.Second))
+	c := New(WithTimeout(time.Second))
 
-	_, err := c.Get(context.Background(), ts.URL+"/timeout")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	_, err := c.Get(ctx, ts.URL+"/timeout")
 	ts.CloseClientConnections()
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("expected context.Canceled error, but got error: %v", err)
@@ -89,7 +96,7 @@ func TestResponseDataUncompression(t *testing.T) {
 	ts := createTestServer()
 	defer ts.Close()
 
-	c := New(http.Client{})
+	c := New()
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/gzip-compressed", nil)
 	req.Header.Set("Accept", AcceptGzipHeader)

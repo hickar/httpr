@@ -46,7 +46,9 @@ func (r *Response) Headers() map[string]string {
 	}
 
 	for key, values := range r.rawResp.Header {
-		headers[key] = values[0]
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
 	}
 	return headers
 }

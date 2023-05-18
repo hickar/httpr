@@ -2,9 +2,10 @@ package httpr
 
 import (
 	"archive/tar"
+	"bytes"
+	"compress/flate"
 	"compress/gzip"
-	"compress/zlib"
-	"fmt"
+	"context"
 	"io"
 	"math/rand"
 	"net/http"
@@ -12,21 +13,6 @@ import (
 	"strings"
 	"time"
 )
-
-func WrapWithCompressionReader(r io.Reader, compressionType string) (io.Reader, error) {
-	switch compressionType {
-	case CompressionTar:
-		return tar.NewReader(r), nil
-	case CompressionDeflate:
-		return zlib.NewReader(r)
-	case CompressionGzip:
-		return gzip.NewReader(r)
-	case CompressionNone:
-		return r, nil
-	default:
-		return r, fmt.Errorf("unsupported response compression format '%s'", compressionType)
-	}
-}
 
 func GetContentTypeHeaderValue(formatType string) string {
 	switch formatType {
@@ -67,44 +53,71 @@ func GetAcceptHeaderValue(compressionType, formatType string) string {
 	return "*/*"
 }
 
-func BuildRequest(url, method, compression, format string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequest(method, url, body)
+func wrapWithCompressionReader(resp *http.Response, req *http.Request) (io.Reader, error) {
+	for _, mimeType := range req.Header.Values("Accept") {
+		switch strings.ToLower(mimeType) {
+		case AcceptGzipHeader:
+			return gzip.NewReader(resp.Body)
+
+		case AcceptDeflateHeader:
+			return flate.NewReader(resp.Body), nil
+
+		case AcceptTarHeader:
+			return tar.NewReader(resp.Body), nil
+
+		}
+	}
+
+	for _, encodingType := range resp.Header.Values("Content-Encoding") {
+		switch strings.ToLower(encodingType) {
+		case CompressionGzip:
+			return gzip.NewReader(resp.Body)
+
+		case CompressionDeflate:
+			return flate.NewReader(resp.Body), nil
+
+		case CompressionTar:
+			return tar.NewReader(resp.Body), nil
+
+		}
+	}
+
+	return resp.Body, nil
+}
+
+func buildRequest(ctx context.Context, requestURL, method string, body any) (*http.Request, error) {
+	var reqBody io.Reader
+	switch b := body.(type) {
+	case string:
+		reqBody = strings.NewReader(b)
+	case []byte:
+		reqBody = bytes.NewReader(b)
+	case io.Reader:
+		reqBody = b
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, requestURL, reqBody)
 	if err != nil {
 		return req, err
 	}
 
-	if compression != CompressionNone {
-		req.Header.Set("Content-Encoding", compression)
-	}
-
-	contentTypeValue := GetContentTypeHeaderValue(format)
-	if contentTypeValue != "" {
-		req.Header.Set("Content-Type", contentTypeValue)
-	}
-
-	req.Header.Set("Accept", GetAcceptHeaderValue(compression, format))
-
 	return req, nil
 }
 
-func DefaultClient() *http.Client {
-	c := &http.Client{
-		Timeout:   DefaultRequestTimeout,
-		Transport: DefaultTransport(),
-	}
-	return c
+func Do(req *http.Request, opts ...Option) (*Response, error) {
+	return DefaultClient.Do(req, opts...)
 }
 
-func Do(httpClient *http.Client, req *http.Request) (*Response, error) {
-	return doRequest(httpClient, req)
+func Is1xx(code int) bool {
+	return code >= 200 && code < 300
 }
 
-func DoWithRetry(req *http.Request) (*Response, error) {
-	return defaultClient.Do(req)
+func Is2xx(code int) bool {
+	return code >= 200 && code < 300
 }
 
-func Is2xx(resp *http.Response) bool {
-	return resp.StatusCode >= 200 && resp.StatusCode < 300
+func Is3xx(code int) bool {
+	return code >= 300 && code < 400
 }
 
 func Is4xx(code int) bool {

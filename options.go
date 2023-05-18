@@ -5,6 +5,16 @@ import (
 	"time"
 )
 
+func newDefaultSettings() clientSettings {
+	return clientSettings{
+		rateLimiter:       &unlimitedLimiter{},
+		redirectCheckFn:   func(_ *http.Request, _ []*http.Request) error { return nil },
+		preRequestHookFn:  func(_ *http.Request) error { return nil },
+		postRequestHookFn: func(_ *http.Request, _ *Response) {},
+		retryConditionFn:  func(_ *Response, err error) bool { return true },
+	}
+}
+
 type Option func(settings *clientSettings)
 
 func WithRetryCount(retries int) Option {
@@ -47,6 +57,8 @@ func WithCheckRedirect(checkFn func(*http.Request, []*http.Request) error) Optio
 	}
 }
 
+type RetryConditionFunc func(*Response, error) bool
+
 func WithRetryCondition(conditionFn RetryConditionFunc) Option {
 	return func(settings *clientSettings) {
 		settings.retryConditionFn = conditionFn
@@ -69,7 +81,7 @@ func WithPreRequestHook(hookFn PreRequestHookFn) Option {
 	}
 }
 
-type PostRequestHookFn func(req *http.Request, resp *Response) error
+type PostRequestHookFn func(req *http.Request, resp *Response)
 
 func WithPostRequestHook(hookFn PostRequestHookFn) Option {
 	return func(settings *clientSettings) {
@@ -85,6 +97,14 @@ func WithRateLimiter(limiter Limiter) Option {
 			settings.rateLimiter = limiter
 		}
 	}
+}
+
+type Limiter interface {
+	Take() time.Time
+}
+
+func NewUnlimitedLimiter() Limiter {
+	return &unlimitedLimiter{}
 }
 
 type unlimitedLimiter struct{}
