@@ -1,15 +1,17 @@
 package httpr
 
 import (
-	"archive/tar"
 	"compress/gzip"
-	"compress/zlib"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+)
+
+const (
+	getPayloadSuccess = "sample"
 )
 
 func handleTest(w http.ResponseWriter) {
@@ -26,48 +28,31 @@ func handleTestTimeout(w http.ResponseWriter, req *http.Request) {
 	w.WriteHeader(http.StatusRequestTimeout)
 }
 
-func handleTestCompressed(compression string) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		var (
-			respData = []byte(fmt.Sprintf(`{"msg": "%s"}`, _testMsg))
-			wr       io.WriteCloser
-		)
+func handleGzipCompression(w io.Writer) {
+	var (
+		respData = []byte(fmt.Sprintf(`{"msg": "%s"}`, _testMsg))
+		wr       = gzip.NewWriter(w)
+	)
 
-		switch compression {
-		case CompressionGzip:
-			wr = gzip.NewWriter(w)
-		case CompressionTar:
-			wr = tar.NewWriter(w)
-		case CompressionDeflate:
-			wr = zlib.NewWriter(w)
-		default:
-			panic("invalid compression type: " + compression)
-		}
-
-		_, err := wr.Write(respData)
-		if err != nil {
-			panic(err)
-		}
-		defer func(wr io.WriteCloser) {
-			if err = wr.Close(); err != nil {
-				panic(err)
-			}
-
-			flusher, ok := wr.(interface{ Flush() error })
-			if ok {
-				return
-			}
-
-			if err = flusher.Flush(); err != nil {
-				panic(err)
-			}
-		}(wr)
-
-		flusher, ok := w.(http.Flusher)
-		if ok {
-			flusher.Flush()
-		}
+	if _, err := wr.Write(respData); err != nil {
+		panic(err)
 	}
+	if err := wr.Close(); err != nil {
+		panic(err)
+	}
+	if err := wr.Flush(); err != nil {
+		panic(err)
+	}
+}
+
+func handleMethodGet(w http.ResponseWriter, req *http.Request) {
+	if req.URL.Path != "/get" || req.Method != http.MethodGet {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(getPayloadSuccess))
 }
 
 func createTestServer() *httptest.Server {
@@ -79,13 +64,71 @@ func createTestServer() *httptest.Server {
 			case "/timeout":
 				handleTestTimeout(w, req)
 			case "/gzip-compressed":
-				handleTestCompressed(CompressionGzip)(w, req)
-			case "/tar-compressed":
-				handleTestCompressed(CompressionTar)(w, req)
-			case "/deflate-compressed":
-				handleTestCompressed(CompressionDeflate)(w, req)
+				handleGzipCompression(w)
+			case "/get":
+				handleMethodGet(w, req)
 			}
 		}
+
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+
+	return ts
+}
+
+func createMethodTestServer() *httptest.Server {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/get":
+			if req.Method == http.MethodGet {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		case "/post":
+			if req.Method == http.MethodPost {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		case "/patch":
+			if req.Method == http.MethodPatch {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		case "/put":
+			if req.Method == http.MethodPut {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		case "/delete":
+			if req.Method == http.MethodDelete {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		case "/head":
+			if req.Method == http.MethodHead {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		case "/options":
+			if req.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		case "/connect":
+			if req.Method == http.MethodConnect {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		case "/trace":
+			if req.Method == http.MethodTrace {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+
+		w.WriteHeader(http.StatusInternalServerError)
 	}))
 
 	return ts
@@ -154,7 +197,7 @@ func TestIsValidURL(t *testing.T) {
 			actual := IsValidURL(tt.input)
 
 			if tt.expected != actual {
-				t.Errorf("expected != actual: %t != %t", tt.expected, actual)
+				t.Fatalf("expected != actual: %t != %t", tt.expected, actual)
 			}
 		})
 	}

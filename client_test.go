@@ -41,6 +41,90 @@ func TestSuccessfulResponse(t *testing.T) {
 	}
 }
 
+func TestMethods(t *testing.T) {
+	ts := createMethodTestServer()
+	defer ts.Close()
+
+	c := New()
+
+	tests := []struct {
+		name             string
+		clientMethodCall func(*Client, string) (*Response, error)
+		testURL          string
+	}{
+		{
+			name: "TestGetMethod",
+			clientMethodCall: func(c *Client, reqURL string) (*Response, error) {
+				return c.Get(context.Background(), reqURL)
+			},
+			testURL: ts.URL + "/get",
+		},
+		{
+			name: "TestPostMethod",
+			clientMethodCall: func(c *Client, reqURL string) (*Response, error) {
+				return c.Post(context.Background(), reqURL, nil)
+			},
+			testURL: ts.URL + "/post",
+		},
+		{
+			name: "TestPutMethod",
+			clientMethodCall: func(c *Client, reqURL string) (*Response, error) {
+				return c.Put(context.Background(), reqURL, nil)
+			},
+			testURL: ts.URL + "/put",
+		},
+		{
+			name: "TestPatchMethod",
+			clientMethodCall: func(c *Client, reqURL string) (*Response, error) {
+				return c.Patch(context.Background(), reqURL, nil)
+			},
+			testURL: ts.URL + "/patch",
+		},
+		{
+			name: "TestDeleteMethod",
+			clientMethodCall: func(c *Client, reqURL string) (*Response, error) {
+				return c.Delete(context.Background(), reqURL)
+			},
+			testURL: ts.URL + "/delete",
+		},
+		{
+			name: "TestOptionsMethod",
+			clientMethodCall: func(c *Client, reqURL string) (*Response, error) {
+				return c.Options(context.Background(), reqURL, nil)
+			},
+			testURL: ts.URL + "/options",
+		},
+		{
+			name: "TestHeadMethod",
+			clientMethodCall: func(c *Client, reqURL string) (*Response, error) {
+				return c.Head(context.Background(), reqURL)
+			},
+			testURL: ts.URL + "/head",
+		},
+		{
+			name: "TestTraceMethod",
+			clientMethodCall: func(c *Client, reqURL string) (*Response, error) {
+				return c.Head(context.Background(), reqURL)
+			},
+			testURL: ts.URL + "/trace",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := tt.clientMethodCall(&c, tt.testURL)
+			if err != nil {
+				t.Fatalf("expected nil error, got instead %v", err)
+			}
+
+			respCode := resp.StatusCode()
+			if respCode != http.StatusOK {
+				t.Fatalf("expected status code %d, got %d instead", http.StatusOK, respCode)
+			}
+		})
+	}
+}
+
 func TestRequestRetry(t *testing.T) {
 	var (
 		expectedRetryCount = 3
@@ -66,13 +150,13 @@ func TestRequestRetry(t *testing.T) {
 	)
 	resp, err := c.Get(context.Background(), ts.URL+"/test")
 	if err != nil {
-		t.Errorf("expected nil error, got %v", err)
+		t.Fatalf("expected nil error, got %v", err)
 	}
 	if resp.StatusCode() != http.StatusInternalServerError {
-		t.Errorf("expected status code %d, got %d instead", http.StatusInternalServerError, resp.StatusCode())
+		t.Fatalf("expected status code %d, got %d instead", http.StatusInternalServerError, resp.StatusCode())
 	}
 	if actualRetryCount != expectedRetryCount {
-		t.Errorf("expected != actual, %d != %d", actualRetryCount, expectedRetryCount)
+		t.Fatalf("expected != actual, %d != %d", actualRetryCount, expectedRetryCount)
 	}
 }
 
@@ -92,7 +176,7 @@ func TestRequestTimeout(t *testing.T) {
 	}
 }
 
-func TestResponseDataUncompression(t *testing.T) {
+func TestGzipAutoUncompression(t *testing.T) {
 	ts := createTestServer()
 	defer ts.Close()
 
@@ -101,7 +185,7 @@ func TestResponseDataUncompression(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/gzip-compressed", nil)
 	req.Header.Set("Accept", AcceptGzipHeader)
 
-	resp, err := c.Do(req)
+	resp, err := c.Do(req, WithAutoDecompression(true))
 	if err != nil {
 		t.Fatalf("expected no error but got error '%+v'", err)
 	}

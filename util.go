@@ -1,9 +1,7 @@
 package httpr
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/flate"
 	"compress/gzip"
 	"context"
 	"io"
@@ -53,32 +51,10 @@ func GetAcceptHeaderValue(compressionType, formatType string) string {
 	return "*/*"
 }
 
-func wrapWithCompressionReader(resp *http.Response, req *http.Request) (io.Reader, error) {
+func wrapWithCompressionReader(resp *http.Response, req *http.Request) (io.ReadCloser, error) {
 	for _, mimeType := range req.Header.Values("Accept") {
-		switch strings.ToLower(mimeType) {
-		case AcceptGzipHeader:
+		if strings.ToLower(mimeType) == AcceptGzipHeader {
 			return gzip.NewReader(resp.Body)
-
-		case AcceptDeflateHeader:
-			return flate.NewReader(resp.Body), nil
-
-		case AcceptTarHeader:
-			return tar.NewReader(resp.Body), nil
-
-		}
-	}
-
-	for _, encodingType := range resp.Header.Values("Content-Encoding") {
-		switch strings.ToLower(encodingType) {
-		case CompressionGzip:
-			return gzip.NewReader(resp.Body)
-
-		case CompressionDeflate:
-			return flate.NewReader(resp.Body), nil
-
-		case CompressionTar:
-			return tar.NewReader(resp.Body), nil
-
 		}
 	}
 

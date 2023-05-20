@@ -15,14 +15,15 @@ type Client struct {
 }
 
 type clientSettings struct {
-	rateLimiter      Limiter
-	retryCount       int
-	retryDelay       time.Duration
-	retryDelayDelta  time.Duration
-	retryConditionFn RetryConditionFunc
-	timeout          time.Duration
-	transport        http.RoundTripper
-	cookieJar        http.CookieJar
+	rateLimiter          Limiter
+	retryCount           int
+	retryDelay           time.Duration
+	retryDelayDelta      time.Duration
+	retryConditionFn     RetryConditionFunc
+	timeout              time.Duration
+	transport            http.RoundTripper
+	cookieJar            http.CookieJar
+	decompressionEnabled bool
 
 	redirectCheckFn   func(*http.Request, []*http.Request) error
 	preRequestHookFn  PreRequestHookFn
@@ -57,7 +58,7 @@ func (c *Client) Do(req *http.Request, opts ...Option) (*Response, error) {
 	}
 
 	for r := 0; r < retryCount; r++ {
-		resp, err = doRequest(c.client, req)
+		resp, err = doRequest(c.client, req, settings)
 		settings.postRequestHookFn(req, resp)
 
 		mustRetry := settings.retryConditionFn(resp, err)
@@ -127,8 +128,8 @@ func (c *Client) Head(ctx context.Context, requestURL string, opts ...Option) (*
 	return c.Do(req, opts...)
 }
 
-func (c *Client) Options(ctx context.Context, requestURL string, opts ...Option) (*Response, error) {
-	req, err := buildRequest(ctx, requestURL, http.MethodOptions, nil)
+func (c *Client) Options(ctx context.Context, requestURL string, body any, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodOptions, body)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +155,15 @@ func (c *Client) Delete(ctx context.Context, requestURL string, opts ...Option) 
 	return c.Do(req, opts...)
 }
 
+func (c *Client) Trace(ctx context.Context, requestURL string, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodTrace, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req, opts...)
+}
+
 func (c *Client) Client() *http.Client {
 	return c.client
 }
@@ -170,7 +180,7 @@ func (c *Client) SetTransport(transport http.RoundTripper) {
 	c.client.Transport = transport
 }
 
-func doRequest(httpClient *http.Client, req *http.Request) (*Response, error) {
+func doRequest(httpClient *http.Client, req *http.Request, settings clientSettings) (*Response, error) {
 	var (
 		r   = new(Response)
 		err error
@@ -187,19 +197,20 @@ func doRequest(httpClient *http.Client, req *http.Request) (*Response, error) {
 		}
 	}(r.rawResp.Body)
 
-	reader, err := wrapWithCompressionReader(r.rawResp, req)
-	if err != nil {
-		return r, fmt.Errorf("unable to wrap response in compression reader: %w", err)
+	reader := r.rawResp.Body
+	if settings.decompressionEnabled {
+		reader, err = wrapWithCompressionReader(r.rawResp, req)
+		if err != nil {
+			return r, fmt.Errorf("unable to wrap response in compression reader: %w", err)
+		}
 	}
-	closer, ok := reader.(io.Closer)
-	if ok {
-		defer func(body io.Closer) {
-			closeErr := body.Close()
-			if closeErr != nil {
-				err = closeErr
-			}
-		}(closer)
-	}
+
+	defer func(body io.Closer) {
+		closeErr := body.Close()
+		if closeErr != nil {
+			err = closeErr
+		}
+	}(reader)
 
 	r.body, err = io.ReadAll(reader)
 	if err != nil {

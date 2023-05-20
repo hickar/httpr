@@ -99,6 +99,12 @@ func WithRateLimiter(limiter Limiter) Option {
 	}
 }
 
+func WithAutoDecompression(enabled bool) Option {
+	return func(settings *clientSettings) {
+		settings.decompressionEnabled = enabled
+	}
+}
+
 type Limiter interface {
 	Take() time.Time
 }
