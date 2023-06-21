@@ -2,8 +2,10 @@ package httpr
 
 import (
 	"context"
-	"io"
+	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -15,21 +17,23 @@ const (
 type RequestBuilder struct {
 	err error
 
-	ctx     context.Context
-	url     string
-	method  string
-	body    io.Reader
-	headers map[string][]string
+	ctx         context.Context
+	url         *url.URL
+	method      string
+	body        any
+	headers     map[string][]string
+	queryParams url.Values
 }
 
-func NewRequestBuilder() RequestBuilder {
-	return RequestBuilder{
-		headers: make(map[string][]string),
+func NewRequest() *RequestBuilder {
+	return &RequestBuilder{
+		headers:     make(map[string][]string),
+		queryParams: make(url.Values),
 	}
 }
 
-func (rb *RequestBuilder) SetUrl(requestUrl string) *RequestBuilder {
-	rb.url = requestUrl
+func (rb *RequestBuilder) SetURL(requestURL string) *RequestBuilder {
+	rb.url, rb.err = parseURL(requestURL)
 	return rb
 }
 
@@ -38,20 +42,67 @@ func (rb *RequestBuilder) SetMethod(method string) *RequestBuilder {
 	return rb
 }
 
-func (rb *RequestBuilder) Get(requestUrl string) *RequestBuilder {
+func (rb *RequestBuilder) Get(requestURL string, body any) *RequestBuilder {
 	rb.method = http.MethodGet
-	rb.url = requestUrl
-	return rb
-}
-
-func (rb *RequestBuilder) Post(requestUrl string, body io.Reader) *RequestBuilder {
-	rb.method = http.MethodPost
-	rb.url = requestUrl
+	rb.SetURL(requestURL)
 	rb.body = body
 	return rb
 }
 
-func (rb *RequestBuilder) SetBody(body io.Reader) *RequestBuilder {
+func (rb *RequestBuilder) Post(requestURL string, body any) *RequestBuilder {
+	rb.method = http.MethodPost
+	rb.SetURL(requestURL)
+	rb.body = body
+	return rb
+}
+
+func (rb *RequestBuilder) Patch(requestURL string, body any) *RequestBuilder {
+	rb.method = http.MethodPatch
+	rb.SetURL(requestURL)
+	rb.body = body
+	return rb
+}
+
+func (rb *RequestBuilder) Put(requestURL string, body any) *RequestBuilder {
+	rb.method = http.MethodPut
+	rb.SetURL(requestURL)
+	rb.body = body
+	return rb
+}
+
+func (rb *RequestBuilder) Options(requestURL string, body any) *RequestBuilder {
+	rb.method = http.MethodOptions
+	rb.SetURL(requestURL)
+	rb.body = body
+	return rb
+}
+
+func (rb *RequestBuilder) Head(requestURL string) *RequestBuilder {
+	rb.method = http.MethodHead
+	rb.SetURL(requestURL)
+	return rb
+}
+
+func (rb *RequestBuilder) Connect(requestURL string) *RequestBuilder {
+	rb.method = http.MethodConnect
+	rb.SetURL(requestURL)
+	return rb
+}
+
+func (rb *RequestBuilder) Delete(requestURL string, body any) *RequestBuilder {
+	rb.method = http.MethodDelete
+	rb.SetURL(requestURL)
+	rb.body = body
+	return rb
+}
+
+func (rb *RequestBuilder) Trace(requestURL string) *RequestBuilder {
+	rb.method = http.MethodTrace
+	rb.SetURL(requestURL)
+	return rb
+}
+
+func (rb *RequestBuilder) SetBody(body any) *RequestBuilder {
 	rb.body = body
 	return rb
 }
@@ -78,7 +129,48 @@ func (rb *RequestBuilder) SetHeaders(headers map[string]string) *RequestBuilder 
 	return rb
 }
 
-func (rb *RequestBuilder) SetQueryParams() *RequestBuilder {
+func (rb *RequestBuilder) SetQueryString(query string) *RequestBuilder {
+	if rb.queryParams == nil {
+		rb.queryParams = make(url.Values)
+	}
+
+	queryParams, err := url.ParseQuery(query)
+	if err != nil {
+		rb.err = fmt.Errorf("malformed query: %w", err)
+		return rb
+	}
+
+	for key, values := range queryParams {
+		for _, value := range values {
+			rb.queryParams.Add(key, value)
+		}
+	}
+
+	return rb
+}
+
+func (rb *RequestBuilder) SetQueryParam(key, value string) *RequestBuilder {
+	if strings.TrimSpace(key) == "" {
+		return rb
+	}
+
+	if rb.queryParams == nil {
+		rb.queryParams = make(url.Values)
+	}
+
+	rb.queryParams.Set(key, value)
+	return rb
+}
+
+func (rb *RequestBuilder) SetQueryParams(params map[string]string) *RequestBuilder {
+	if rb.queryParams == nil {
+		rb.queryParams = make(url.Values, len(params))
+	}
+
+	for key, value := range params {
+		rb.SetQueryParam(key, value)
+	}
+
 	return rb
 }
 
@@ -96,14 +188,22 @@ func (rb *RequestBuilder) Build() (*http.Request, error) {
 	if rb.err != nil {
 		return nil, rb.err
 	}
-
-	req, err := http.NewRequest(rb.method, rb.url, rb.body)
-	if err != nil {
-		return nil, err
+	if rb.url == nil {
+		return nil, errors.New("request url is not set")
 	}
 
-	if rb.ctx != nil {
-		req = req.WithContext(rb.ctx)
+	reqURL := composeURL(rb.url, rb.queryParams)
+	reqBody := convertBodyToReader(rb.body)
+	reqMethod := composeMethod(rb.method)
+
+	reqCtx := rb.ctx
+	if reqCtx == nil {
+		reqCtx = context.Background()
+	}
+
+	req, err := http.NewRequestWithContext(reqCtx, reqMethod, reqURL, reqBody)
+	if err != nil {
+		return nil, err
 	}
 
 	for key, values := range rb.headers {
@@ -113,6 +213,29 @@ func (rb *RequestBuilder) Build() (*http.Request, error) {
 	}
 
 	return req, nil
+}
+
+func composeURL(reqURL *url.URL, params url.Values) string {
+	encodedQuery := params.Encode()
+	if encodedQuery == "" {
+		return reqURL.String()
+	}
+
+	if reqURL.RawQuery == "" {
+		reqURL.RawQuery = encodedQuery
+	} else {
+		reqURL.RawQuery += "&" + encodedQuery
+	}
+
+	return reqURL.String()
+}
+
+func composeMethod(method string) string {
+	if method == "" {
+		return http.MethodGet
+	}
+
+	return strings.ToUpper(method)
 }
 
 func getMimeType(name string) string {
@@ -130,4 +253,12 @@ func getMimeType(name string) string {
 	default:
 		return "*/*"
 	}
+}
+
+func parseURL(requestURL string) (*url.URL, error) {
+	if !IsValidURL(requestURL) {
+		return nil, fmt.Errorf("invalid URL '%s'", requestURL)
+	}
+
+	return url.Parse(requestURL)
 }

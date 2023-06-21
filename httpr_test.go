@@ -12,6 +12,7 @@ import (
 
 const (
 	getPayloadSuccess = "sample"
+	methodSuccessBody = "success"
 )
 
 func handleTest(w http.ResponseWriter) {
@@ -78,57 +79,32 @@ func createTestServer() *httptest.Server {
 
 func createMethodTestServer() *httptest.Server {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/get":
-			if req.Method == http.MethodGet {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		case "/post":
-			if req.Method == http.MethodPost {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		case "/patch":
-			if req.Method == http.MethodPatch {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		case "/put":
-			if req.Method == http.MethodPut {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		case "/delete":
-			if req.Method == http.MethodDelete {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		case "/head":
-			if req.Method == http.MethodHead {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		case "/options":
-			if req.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		case "/connect":
-			if req.Method == http.MethodConnect {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-		case "/trace":
-			if req.Method == http.MethodTrace {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
+		switch {
+		case req.URL.Path == "/get" && req.Method == http.MethodGet:
+			break
+		case req.URL.Path == "/post" && req.Method == http.MethodPost:
+			break
+		case req.URL.Path == "/patch" && req.Method == http.MethodPatch:
+			break
+		case req.URL.Path == "/put" && req.Method == http.MethodPut:
+			break
+		case req.URL.Path == "/delete" && req.Method == http.MethodDelete:
+			break
+		case req.URL.Path == "/head" && req.Method == http.MethodHead:
+			break
+		case req.URL.Path == "/options" && req.Method == http.MethodOptions:
+			break
+		case req.URL.Path == "/connect" && req.Method == http.MethodConnect:
+			break
+		case req.URL.Path == "/trace" && req.Method == http.MethodTrace:
+			break
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
+			return
 		}
 
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(methodSuccessBody))
 	}))
 
 	return ts

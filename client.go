@@ -83,8 +83,8 @@ func (c *Client) Do(req *http.Request, opts ...Option) (*Response, error) {
 	return resp, nil
 }
 
-func (c *Client) Get(ctx context.Context, requestURL string, opts ...Option) (*Response, error) {
-	req, err := buildRequest(ctx, requestURL, http.MethodGet, nil)
+func (c *Client) Get(ctx context.Context, requestURL string, body any, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodGet, body)
 	if err != nil {
 		return nil, err
 	}

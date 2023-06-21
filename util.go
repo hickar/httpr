@@ -62,6 +62,17 @@ func wrapWithCompressionReader(resp *http.Response, req *http.Request) (io.ReadC
 }
 
 func buildRequest(ctx context.Context, requestURL, method string, body any) (*http.Request, error) {
+	reqBody := convertBodyToReader(body)
+
+	req, err := http.NewRequestWithContext(ctx, method, requestURL, reqBody)
+	if err != nil {
+		return req, err
+	}
+
+	return req, nil
+}
+
+func convertBodyToReader(body any) io.Reader {
 	var reqBody io.Reader
 	switch b := body.(type) {
 	case string:
@@ -72,12 +83,7 @@ func buildRequest(ctx context.Context, requestURL, method string, body any) (*ht
 		reqBody = b
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, requestURL, reqBody)
-	if err != nil {
-		return req, err
-	}
-
-	return req, nil
+	return reqBody
 }
 
 func Do(req *http.Request, opts ...Option) (*Response, error) {
