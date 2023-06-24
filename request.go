@@ -9,11 +9,6 @@ import (
 	"strings"
 )
 
-const (
-	AcceptHeader      = "Accept"
-	ContentTypeHeader = "Content-Type"
-)
-
 type RequestBuilder struct {
 	err error
 
@@ -23,6 +18,7 @@ type RequestBuilder struct {
 	body        any
 	headers     map[string][]string
 	queryParams url.Values
+	cookies     []*http.Cookie
 }
 
 func NewRequest() *RequestBuilder {
@@ -174,13 +170,8 @@ func (rb *RequestBuilder) SetQueryParams(params map[string]string) *RequestBuild
 	return rb
 }
 
-func (rb *RequestBuilder) SetAcceptType(typeName string) *RequestBuilder {
-	rb.SetHeader(AcceptHeader, getMimeType(typeName))
-	return rb
-}
-
-func (rb *RequestBuilder) SetContentType(typeName string) *RequestBuilder {
-	rb.SetHeader(ContentTypeHeader, getMimeType(typeName))
+func (rb *RequestBuilder) SetCookies(cookies []*http.Cookie) *RequestBuilder {
+	rb.cookies = cookies
 	return rb
 }
 
@@ -212,6 +203,10 @@ func (rb *RequestBuilder) Build() (*http.Request, error) {
 		}
 	}
 
+	for _, cookie := range rb.cookies {
+		req.AddCookie(cookie)
+	}
+
 	return req, nil
 }
 
@@ -236,23 +231,6 @@ func composeMethod(method string) string {
 	}
 
 	return strings.ToUpper(method)
-}
-
-func getMimeType(name string) string {
-	switch strings.ToLower(name) {
-	case CompressionTar, CompressionGzip:
-		return "application/gzip"
-	case CompressionDeflate:
-		return "application/zlib"
-	case FormatCsv:
-		return "text/csv"
-	case FormatJson:
-		return "application/json"
-	case FormatXml:
-		return "application/xml"
-	default:
-		return "*/*"
-	}
 }
 
 func parseURL(requestURL string) (*url.URL, error) {

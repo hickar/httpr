@@ -12,48 +12,9 @@ import (
 	"time"
 )
 
-func GetContentTypeHeaderValue(formatType string) string {
-	switch formatType {
-	case FormatJson:
-		return "application/json"
-	case FormatXml:
-		return "application/xml"
-	case FormatCsv:
-		return "text/csv"
-	default:
-		return ""
-	}
-}
-
-func GetAcceptHeaderValue(compressionType, formatType string) string {
-	if compressionType != CompressionNone {
-		switch compressionType {
-		case CompressionTar, CompressionGzip:
-			return "application/gzip"
-		case CompressionDeflate:
-			return "application/zlib"
-		default:
-			return "*/*"
-		}
-	}
-
-	if formatType != "" {
-		switch formatType {
-		case FormatCsv:
-			return "text/csv"
-		case FormatJson:
-			return "application/json"
-		case FormatXml:
-			return "application/xml"
-		}
-	}
-
-	return "*/*"
-}
-
 func wrapWithCompressionReader(resp *http.Response, req *http.Request) (io.ReadCloser, error) {
 	for _, mimeType := range req.Header.Values("Accept") {
-		if strings.ToLower(mimeType) == AcceptGzipHeader {
+		if strings.ToLower(mimeType) == "application/gzip" {
 			return gzip.NewReader(resp.Body)
 		}
 	}

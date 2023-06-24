@@ -32,7 +32,7 @@ func (r *Response) String() string {
 }
 
 func (r *Response) StatusCode() int {
-	if r.rawResp == nil {
+	if r == nil || r.rawResp == nil {
 		return 0
 	}
 
@@ -67,4 +67,12 @@ func (r *Response) RequestURL() string {
 	}
 
 	return r.rawResp.Request.URL.String()
+}
+
+func (r *Response) Raw() *http.Response {
+	if r == nil {
+		return nil
+	}
+
+	return r.rawResp
 }

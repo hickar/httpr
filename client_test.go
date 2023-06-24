@@ -196,8 +196,8 @@ func TestGzipAutoUncompression(t *testing.T) {
 
 	c := New()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/gzip-compressed", nil)
-	req.Header.Set("Accept", AcceptGzipHeader)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, ts.URL+"/gzip-compressed", nil)
+	req.Header.Set("Accept", "application/gzip")
 
 	resp, err := c.Do(req, WithAutoDecompression(true))
 	if err != nil {
