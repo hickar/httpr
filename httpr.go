@@ -1,3 +1,9 @@
+// Copyright (c) 2015-2023 Pershin Egor (hickar@protonmail.ch), All rights reserved.
+// httpr source code and usage is governed by a MIT style
+// license that can be found in the LICENSE file.
+
+// Package httpr provides convenient methods for building and executing HTTP requests
+// in GO idiomatic way.
 package httpr
 
 import (
@@ -10,12 +16,16 @@ const (
 	_defaultConnsPerHost        = 100
 )
 
+// DefaultClient is static client initialized with call to New.
 var DefaultClient = New()
 
+// New creates new client with provided Options. Options must implement Option interface.
+// Call to New is similar to call NewWithClient(&http.Client{}, opts...}.
 func New(opts ...Option) Client {
 	return NewWithClient(&http.Client{}, opts...)
 }
 
+// NewWithClient creates new client, which uses passed http.Client instance and options.
 func NewWithClient(httpClient *http.Client, opts ...Option) Client {
 	settings := newDefaultSettings()
 	for _, opt := range opts {

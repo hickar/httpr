@@ -32,7 +32,7 @@ func TestResponseBytes(t *testing.T) {
 		)
 
 		if !bytes.Equal(expectedBody, actualBody) {
-			t.Errorf("expeced body != actual: '%s' != '%s'", string(expectedBody), string(actualBody))
+			t.Errorf("expected body != actual: '%s' != '%s'", string(expectedBody), string(actualBody))
 		}
 	})
 }
@@ -47,7 +47,7 @@ func TestResponseString(t *testing.T) {
 	actualBodyContent := resp.String()
 
 	if expectedBodyContent != actualBodyContent {
-		t.Errorf("expected reponse string != actual: '%s' != '%s'", expectedBodyContent, actualBodyContent)
+		t.Errorf("expected response string != actual: '%s' != '%s'", expectedBodyContent, actualBodyContent)
 	}
 }
 
@@ -81,6 +81,7 @@ func TestResponseStatusCode(t *testing.T) {
 	})
 }
 
+//nolint:thelper
 func assertNoPanic(t *testing.T, fn func()) {
 	defer func() {
 		if recover() != nil {

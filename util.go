@@ -47,30 +47,37 @@ func convertBodyToReader(body any) io.Reader {
 	return reqBody
 }
 
+// Do executes provided request by using DefaultClient.
 func Do(req *http.Request, opts ...Option) (*Response, error) {
 	return DefaultClient.Do(req, opts...)
 }
 
+// Is1xx check whether provided status code is in range of 100 and 200.
 func Is1xx(code int) bool {
-	return code >= 200 && code < 300
+	return code >= 100 && code < 200
 }
 
+// Is2xx check whether provided status code is in range of 100 and 200.
 func Is2xx(code int) bool {
 	return code >= 200 && code < 300
 }
 
+// Is3xx check whether provided status code is in range of 100 and 200.
 func Is3xx(code int) bool {
 	return code >= 300 && code < 400
 }
 
+// Is4xx check whether provided status code is in range of 100 and 200.
 func Is4xx(code int) bool {
 	return code >= 400 && code < 500
 }
 
+// Is5xx check whether provided status code is in range of 100 and 200.
 func Is5xx(code int) bool {
 	return code >= 500 && code < 600
 }
 
+// IsValidURL checks whether provided URL is valid or not.
 func IsValidURL(rawURL string) bool {
 	parsedURL, err := url.ParseRequestURI(rawURL)
 	if err != nil {
@@ -92,10 +99,16 @@ func IsValidURL(rawURL string) bool {
 	return true
 }
 
-func RandomDelay(delayLimit float64) PreRequestHookFn {
+// RandomDelay is pre-built PreRequestHookFn compliant function used for delaying request execution
+// by random delay. Random delay is calculated by calling rand.Int63n with provided delayLimit argument value.
+func RandomDelay(delayLimit time.Duration) PreRequestHookFn {
 	return func(req *http.Request) error {
+		if delayLimit < 0 {
+			return nil
+		}
+
 		//nolint:gosec
-		delayMs := rand.Int63n(int64(delayLimit * 1000))
+		delayMs := rand.Int63n(int64(delayLimit))
 		time.Sleep(time.Millisecond * time.Duration(delayMs))
 		return nil
 	}

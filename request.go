@@ -9,18 +9,26 @@ import (
 	"strings"
 )
 
+// RequestBuilder struct provides convenient interface
+// for *http.Request instances construction.
 type RequestBuilder struct {
 	err error
 
-	ctx         context.Context
-	url         *url.URL
-	method      string
-	body        any
-	headers     map[string][]string
-	queryParams url.Values
-	cookies     []*http.Cookie
+	ctx                  context.Context
+	url                  *url.URL
+	method               string
+	body                 any
+	headers              map[string][]string
+	queryParams          url.Values
+	cookies              []*http.Cookie
+	basicAuthCredentials *struct {
+		user string
+		pass string
+	}
 }
 
+// NewRequest creates new RequestBuilder instance, which used for
+// http.Request building.
 func NewRequest() *RequestBuilder {
 	return &RequestBuilder{
 		headers:     make(map[string][]string),
@@ -28,16 +36,19 @@ func NewRequest() *RequestBuilder {
 	}
 }
 
+// SetURL sets target URL for current request.
 func (rb *RequestBuilder) SetURL(requestURL string) *RequestBuilder {
 	rb.url, rb.err = parseURL(requestURL)
 	return rb
 }
 
+// SetMethod sets method for current request.
 func (rb *RequestBuilder) SetMethod(method string) *RequestBuilder {
 	rb.method = method
 	return rb
 }
 
+// Get method create "get" HTTP request with specified body.
 func (rb *RequestBuilder) Get(requestURL string, body any) *RequestBuilder {
 	rb.method = http.MethodGet
 	rb.SetURL(requestURL)
@@ -45,6 +56,7 @@ func (rb *RequestBuilder) Get(requestURL string, body any) *RequestBuilder {
 	return rb
 }
 
+// Post method create "post" HTTP request with specified body.
 func (rb *RequestBuilder) Post(requestURL string, body any) *RequestBuilder {
 	rb.method = http.MethodPost
 	rb.SetURL(requestURL)
@@ -52,6 +64,7 @@ func (rb *RequestBuilder) Post(requestURL string, body any) *RequestBuilder {
 	return rb
 }
 
+// Patch method create "patch" HTTP request with specified body.
 func (rb *RequestBuilder) Patch(requestURL string, body any) *RequestBuilder {
 	rb.method = http.MethodPatch
 	rb.SetURL(requestURL)
@@ -59,6 +72,7 @@ func (rb *RequestBuilder) Patch(requestURL string, body any) *RequestBuilder {
 	return rb
 }
 
+// Put method create "put" HTTP request with specified body.
 func (rb *RequestBuilder) Put(requestURL string, body any) *RequestBuilder {
 	rb.method = http.MethodPut
 	rb.SetURL(requestURL)
@@ -66,6 +80,7 @@ func (rb *RequestBuilder) Put(requestURL string, body any) *RequestBuilder {
 	return rb
 }
 
+// Options method create "options" HTTP request with specified body.
 func (rb *RequestBuilder) Options(requestURL string, body any) *RequestBuilder {
 	rb.method = http.MethodOptions
 	rb.SetURL(requestURL)
@@ -73,18 +88,21 @@ func (rb *RequestBuilder) Options(requestURL string, body any) *RequestBuilder {
 	return rb
 }
 
+// Head method create "head" HTTP request.
 func (rb *RequestBuilder) Head(requestURL string) *RequestBuilder {
 	rb.method = http.MethodHead
 	rb.SetURL(requestURL)
 	return rb
 }
 
+// Connect method create "connect" HTTP request.
 func (rb *RequestBuilder) Connect(requestURL string) *RequestBuilder {
 	rb.method = http.MethodConnect
 	rb.SetURL(requestURL)
 	return rb
 }
 
+// Delete method create "delete" HTTP request with specified body.
 func (rb *RequestBuilder) Delete(requestURL string, body any) *RequestBuilder {
 	rb.method = http.MethodDelete
 	rb.SetURL(requestURL)
@@ -92,22 +110,29 @@ func (rb *RequestBuilder) Delete(requestURL string, body any) *RequestBuilder {
 	return rb
 }
 
+// Trace method create "trace" HTTP request.
 func (rb *RequestBuilder) Trace(requestURL string) *RequestBuilder {
 	rb.method = http.MethodTrace
 	rb.SetURL(requestURL)
 	return rb
 }
 
+// SetBody method sets body for current request.
+// Body can be one of following concrete types or types, which implement
+// interfaces: string, []byte, io.Reader.
 func (rb *RequestBuilder) SetBody(body any) *RequestBuilder {
 	rb.body = body
 	return rb
 }
 
+// SetContext sets context for current request. If provided context is nil,
+// new one will be created with context.Background().
 func (rb *RequestBuilder) SetContext(ctx context.Context) *RequestBuilder {
 	rb.ctx = ctx
 	return rb
 }
 
+// SetHeader sets header with provided key and value.
 func (rb *RequestBuilder) SetHeader(key, value string) *RequestBuilder {
 	if rb.headers == nil {
 		rb.headers = make(map[string][]string)
@@ -117,6 +142,7 @@ func (rb *RequestBuilder) SetHeader(key, value string) *RequestBuilder {
 	return rb
 }
 
+// SetHeaders creates and sets headers for each key/value pair in provided map.
 func (rb *RequestBuilder) SetHeaders(headers map[string]string) *RequestBuilder {
 	for key, value := range headers {
 		rb.SetHeader(key, value)
@@ -125,6 +151,8 @@ func (rb *RequestBuilder) SetHeaders(headers map[string]string) *RequestBuilder 
 	return rb
 }
 
+// SetQueryString provides option to set query string parameters by passing
+// raw string.
 func (rb *RequestBuilder) SetQueryString(query string) *RequestBuilder {
 	if rb.queryParams == nil {
 		rb.queryParams = make(url.Values)
@@ -145,6 +173,7 @@ func (rb *RequestBuilder) SetQueryString(query string) *RequestBuilder {
 	return rb
 }
 
+// SetQueryParam sets query parameter with following key and value.
 func (rb *RequestBuilder) SetQueryParam(key, value string) *RequestBuilder {
 	if strings.TrimSpace(key) == "" {
 		return rb
@@ -158,6 +187,8 @@ func (rb *RequestBuilder) SetQueryParam(key, value string) *RequestBuilder {
 	return rb
 }
 
+// SetQueryParams sets multiple query parameters by calling SetQueryParams for each
+// key/value in map.
 func (rb *RequestBuilder) SetQueryParams(params map[string]string) *RequestBuilder {
 	if rb.queryParams == nil {
 		rb.queryParams = make(url.Values, len(params))
@@ -170,11 +201,26 @@ func (rb *RequestBuilder) SetQueryParams(params map[string]string) *RequestBuild
 	return rb
 }
 
+// SetCookies sets cookies for current request.
 func (rb *RequestBuilder) SetCookies(cookies []*http.Cookie) *RequestBuilder {
 	rb.cookies = cookies
 	return rb
 }
 
+// SetBasicAuth encodes and sets basic HTTP authentication credentials.
+func (rb *RequestBuilder) SetBasicAuth(user, pass string) *RequestBuilder {
+	rb.basicAuthCredentials = &struct {
+		user string
+		pass string
+	}{
+		user: user,
+		pass: pass,
+	}
+	return rb
+}
+
+// Build composes *http.Request instance. If errors occurred during previous building steps,
+// they will be returned.
 func (rb *RequestBuilder) Build() (*http.Request, error) {
 	if rb.err != nil {
 		return nil, rb.err
@@ -195,6 +241,10 @@ func (rb *RequestBuilder) Build() (*http.Request, error) {
 	req, err := http.NewRequestWithContext(reqCtx, reqMethod, reqURL, reqBody)
 	if err != nil {
 		return nil, err
+	}
+
+	if rb.basicAuthCredentials != nil {
+		req.SetBasicAuth(rb.basicAuthCredentials.user, rb.basicAuthCredentials.pass)
 	}
 
 	for key, values := range rb.headers {
