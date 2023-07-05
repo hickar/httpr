@@ -60,10 +60,10 @@ req, err := httpr.
 ### Building custom client with features like external ratelimiter (like uber's [ratelimit](https://github.com/uber-go/ratelimit)).
 ```go
 client := httpr.New(
-    httpr.WithRateLimiter(ratelimit.New()),
-	httpr.WithTransport(httpr.BasicAuthTransport("user", "password")),
-	httpr.WithRetryCount(3),
-	httpr.WithTimeout(time.Minute * 3),
+    httpr.WithRateLimiter(ratelimit.New()), 
+    httpr.WithTransport(httpr.BasicAuthTransport("user", "password")),
+    httpr.WithRetryCount(3),
+    httpr.WithTimeout(time.Minute * 3),
 )
 resp, err := client.Get(ctx, "https://mysite.com", nil)
 // ...
