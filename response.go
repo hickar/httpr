@@ -2,6 +2,8 @@ package httpr
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 )
@@ -80,12 +82,21 @@ func (r *Response) RequestURL() string {
 	return r.rawResp.Request.URL.String()
 }
 
+// JSON unmarshalls response JSON body and stores result
+// in values pointed by p.
+func (r *Response) JSON(p any) error {
+	if r == nil || r.body == nil {
+		return errors.New("response body is nil")
+	}
+
+	return json.Unmarshal(r.body, p)
+}
+
 // Raw returns reference to underlying http.Response object. Call to this method handles control
 // over original object to the caller.
 func (r *Response) Raw() *http.Response {
 	if r == nil {
 		return nil
 	}
-
 	return r.rawResp
 }

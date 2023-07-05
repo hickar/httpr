@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"math/rand"
 	"net/http"
@@ -23,7 +25,10 @@ func wrapWithCompressionReader(resp *http.Response, req *http.Request) (io.ReadC
 }
 
 func buildRequest(ctx context.Context, requestURL, method string, body any) (*http.Request, error) {
-	reqBody := convertBodyToReader(body)
+	reqBody, err := convertBodyToReader(body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build request body: %v", err)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, method, requestURL, reqBody)
 	if err != nil {
@@ -33,18 +38,25 @@ func buildRequest(ctx context.Context, requestURL, method string, body any) (*ht
 	return req, nil
 }
 
-func convertBodyToReader(body any) io.Reader {
+func convertBodyToReader(body any) (io.Reader, error) {
 	var reqBody io.Reader
 	switch b := body.(type) {
 	case string:
 		reqBody = strings.NewReader(b)
 	case []byte:
 		reqBody = bytes.NewReader(b)
+	case map[string]any:
+		reqBodyBytes, err := json.Marshal(&b)
+		if err != nil {
+			return nil, err
+		}
+
+		reqBody = bytes.NewReader(reqBodyBytes)
 	case io.Reader:
 		reqBody = b
 	}
 
-	return reqBody
+	return reqBody, nil
 }
 
 // Do executes provided request by using DefaultClient.

@@ -230,7 +230,10 @@ func (rb *RequestBuilder) Build() (*http.Request, error) {
 	}
 
 	reqURL := composeURL(rb.url, rb.queryParams)
-	reqBody := convertBodyToReader(rb.body)
+	reqBody, err := convertBodyToReader(rb.body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build request body: %v", err)
+	}
 	reqMethod := composeMethod(rb.method)
 
 	reqCtx := rb.ctx

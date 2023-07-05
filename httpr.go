@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2023 Pershin Egor (hickar@protonmail.ch), All rights reserved.
+// Copyright (c) 2023 Egor Pershin (hickar@protonmail.ch), All rights reserved.
 // httpr source code and usage is governed by a MIT style
 // license that can be found in the LICENSE file.
 

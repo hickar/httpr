@@ -2,7 +2,10 @@ package httpr
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -79,6 +82,41 @@ func TestResponseStatusCode(t *testing.T) {
 			t.Errorf("expected status code %d, got %d instead", expectedStatusCode, actualStatusCode)
 		}
 	})
+}
+
+func TestResponseJSON(t *testing.T) {
+	type TestJSONResp struct {
+		OK bool `json:"ok"`
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := TestJSONResp{OK: true}
+		respBytes, err := json.Marshal(&resp)
+		if err != nil {
+			panic(err)
+		}
+
+		_, err = w.Write(respBytes)
+		if err != nil {
+			panic(err)
+		}
+	}))
+	defer ts.Close()
+
+	c := New()
+	resp, err := c.Get(context.Background(), ts.URL, nil)
+	if err != nil {
+		t.Errorf("err should be nil, got instead %v", err)
+	}
+
+	var respJSON TestJSONResp
+	if err = resp.JSON(&respJSON); err != nil {
+		t.Errorf("response json should be unmarshalled without errors, got %v", err)
+	}
+
+	if !respJSON.OK {
+		t.Errorf("response json property must be equal true, got false instead")
+	}
 }
 
 //nolint:thelper
