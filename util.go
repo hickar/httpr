@@ -27,7 +27,7 @@ func wrapWithCompressionReader(resp *http.Response, req *http.Request) (io.ReadC
 func buildRequest(ctx context.Context, requestURL, method string, body any) (*http.Request, error) {
 	reqBody, err := convertBodyToReader(body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build request body: %v", err)
+		return nil, fmt.Errorf("failed to build request body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, requestURL, reqBody)
