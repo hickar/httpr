@@ -1,252 +1,190 @@
 package httpr
 
 import (
-	"archive/tar"
-	"compress/flate"
-	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 )
 
-const (
-	DefaultRetriesCount         = 3
-	DefaultRetryDelay           = time.Second * 3
-	DefaultRetryDelayDelta      = 0
-	DefaultRequestTimeout       = time.Minute
-	_defaultTLSHandshakeTimeout = time.Minute
-	_defaultConnsPerHost        = 100
-)
-
-const (
-	AcceptGzipHeader    = "application/gzip"
-	AcceptTarHeader     = "application/x-tar"
-	AcceptDeflateHeader = "application/zlib"
-)
+// Client struct is used for executing requests with client-scoped options.
+type Client struct {
+	client   *http.Client
+	settings clientSettings
+}
 
 type clientSettings struct {
-	rateLimiter      Limiter
-	retryCount       int
-	retryDelay       time.Duration
-	retryDelayDelta  time.Duration
-	retryConditionFn RetryConditionFunc
-	timeout          time.Duration
-	transport        http.RoundTripper
-	cookieJar        http.CookieJar
-	redirectCheckFn  func(*http.Request, []*http.Request) error
-	preRequestHookFn PreRequestHookFn
+	rateLimiter          Limiter
+	retryCount           int
+	retryDelay           time.Duration
+	retryDelayDelta      time.Duration
+	retryConditionFn     RetryConditionFunc
+	timeout              time.Duration
+	transport            http.RoundTripper
+	cookieJar            http.CookieJar
+	decompressionEnabled bool
+
+	redirectCheckFn   func(*http.Request, []*http.Request) error
+	preRequestHookFn  PreRequestHookFn
+	postRequestHookFn PostRequestHookFn
 }
 
-func defaultClientSettings() *clientSettings {
-	return &clientSettings{
-		rateLimiter:      &unlimitedLimiter{},
-		timeout:          DefaultRequestTimeout,
-		retryCount:       0,
-		retryDelay:       DefaultRetryDelay,
-		retryDelayDelta:  DefaultRetryDelayDelta,
-		redirectCheckFn:  nil,
-		preRequestHookFn: func(req *http.Request) error { return nil },
-	}
-}
-
-type Option func(settings *clientSettings)
-
-var (
-	_ Limiter  = (*unlimitedLimiter)(nil)
-	_ Response = (*ClientResponse)(nil)
-)
-
-type RetryConditionFunc func(response *Response) bool
-
-type Limiter interface {
-	Take() time.Time
-}
-
-type unlimitedLimiter struct{}
-
-func (l *unlimitedLimiter) Take() time.Time {
-	return time.Now()
-}
-
-func WithRateLimiter(limiter Limiter) Option {
-	return func(settings *clientSettings) {
-		if limiter != nil {
-			settings.rateLimiter = limiter
+// Do method executes provided requests with options. Passed request options override client-scoped ones.
+func (c *Client) Do(req *http.Request, opts ...Option) (*Response, error) {
+	settings := c.settings
+	if len(opts) > 0 {
+		settings = newDefaultSettings()
+		for _, opt := range opts {
+			opt(&settings)
 		}
 	}
-}
 
-func WithRetryCount(retries int) Option {
-	return func(settings *clientSettings) {
-		settings.retryCount = retries
-	}
-}
-
-func WithRetryDelay(delay time.Duration) Option {
-	return func(settings *clientSettings) {
-		settings.retryDelay = delay
-	}
-}
-
-func WithRetryDelayDelta(delayDelta time.Duration) Option {
-	return func(settings *clientSettings) {
-		settings.retryDelayDelta = delayDelta
-	}
-}
-
-func WithTransport(transport http.RoundTripper) Option {
-	return func(settings *clientSettings) {
-		if transport != nil {
-			settings.transport = transport
-		}
-	}
-}
-
-func WithTimeout(timeout time.Duration) Option {
-	return func(settings *clientSettings) {
-		settings.timeout = timeout
-	}
-}
-
-func WithCheckRedirect(checkFn func(*http.Request, []*http.Request) error) Option {
-	return func(settings *clientSettings) {
-		settings.redirectCheckFn = checkFn
-	}
-}
-
-func WithRetryCondition(conditionFn RetryConditionFunc) Option {
-	return func(settings *clientSettings) {
-		settings.retryConditionFn = conditionFn
-	}
-}
-
-func WithCookieJar(cookieJar http.CookieJar) Option {
-	return func(settings *clientSettings) {
-		settings.cookieJar = cookieJar
-	}
-}
-
-type PreRequestHookFn func(req *http.Request) error
-
-func WithPreRequestHook(hookFn PreRequestHookFn) Option {
-	return func(settings *clientSettings) {
-		settings.preRequestHookFn = hookFn
-	}
-}
-
-type Client interface {
-	Do(*http.Request) (Response, error)
-	Get(string) (Response, error)
-}
-
-type client struct {
-	client *http.Client
-
-	PreRequestHookFn PreRequestHookFn
-	RetryCount       int
-	RetryDelay       time.Duration
-	RetryDelayDelta  time.Duration
-	RateLimiter      Limiter
-	RequestTimeout   time.Duration
-	RedirectCheckFn  func(*http.Request, []*http.Request) error
-}
-
-var _ Client = (*client)(nil)
-
-func NewHttpClient(httpClient http.Client, opts ...Option) Client {
-	settings := defaultClientSettings()
-	for _, opt := range opts {
-		opt(settings)
+	if settings.rateLimiter != nil {
+		settings.rateLimiter.Take()
 	}
 
-	httpClient.Transport = settings.transport
-	httpClient.Jar = settings.cookieJar
-
-	return &client{
-		client:           &httpClient,
-		RetryCount:       settings.retryCount,
-		RetryDelay:       settings.retryDelay,
-		RateLimiter:      settings.rateLimiter,
-		RequestTimeout:   settings.timeout,
-		RedirectCheckFn:  settings.redirectCheckFn,
-		PreRequestHookFn: settings.preRequestHookFn,
-	}
-}
-
-func (c *client) Do(req *http.Request) (Response, error) {
-	c.RateLimiter.Take()
-
-	cancellableCtx, cancel := context.WithTimeout(req.Context(), c.RequestTimeout)
-	defer cancel()
-
-	if err := c.PreRequestHookFn(req); err != nil {
+	if err := settings.preRequestHookFn(req); err != nil {
 		return nil, err
-	}
-
-	if c.RetryCount <= 0 {
-		return doRequest(c.client, req.WithContext(cancellableCtx))
 	}
 
 	var (
-		retryErr  error
-		retryTime = c.RetryDelay
-		lastResp  Response
+		ctx        = req.Context()
+		resp       *Response
+		err        error
+		retryTime  = settings.retryDelay
+		retryCount = settings.retryCount
 	)
 
-	retryFunc := func() (Response, error) {
-		for r := 0; r < c.RetryCount; r++ {
-			resp, err := doRequest(c.client, req.WithContext(cancellableCtx))
-			if err == nil && r <= c.RetryCount {
-				return resp, err
-			}
-			if err != nil {
-				retryErr = err
-			}
+	if retryCount < 1 {
+		retryCount = 1
+	}
 
-			select {
-			case <-time.After(c.RetryDelay):
-				lastResp = resp
-				retryTime += c.RetryDelayDelta
-			case <-cancellableCtx.Done():
-				return nil, cancellableCtx.Err()
-			}
+	for r := 0; r < retryCount; r++ {
+		resp, err = doRequest(c.client, req, settings)
+		settings.postRequestHookFn(req, resp)
+
+		mustRetry := settings.retryConditionFn(resp, err)
+		if !mustRetry {
+			break
+		}
+		if err == nil && r <= retryCount && !mustRetry {
+			return resp, err
 		}
 
-		return lastResp, fmt.Errorf("failed to send request after %d attempt(s): %w", c.RetryCount, retryErr)
+		select {
+		case <-time.After(settings.retryDelay):
+			retryTime += settings.retryDelayDelta
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request after %d attempt(s): %w", settings.retryCount, err)
 	}
 
-	return retryFunc()
+	return resp, nil
 }
 
-func (c *client) Get(requestURL string) (Response, error) {
-	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
+// Get builds and executes GET request with provided options. Shortcut to Client.Do.
+func (c *Client) Get(ctx context.Context, requestURL string, body any, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodGet, body)
 	if err != nil {
 		return nil, err
 	}
 
-	return c.Do(req)
+	return c.Do(req, opts...)
 }
 
-func (c *client) Post(requestURL, contentType string, body io.Reader) (Response, error) {
-	req, err := http.NewRequest(http.MethodPost, requestURL, body)
+// Post builds and executes POST request with provided options. Shortcut to Client.Do.
+func (c *Client) Post(ctx context.Context, requestURL string, body any, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodPost, body)
 	if err != nil {
 		return nil, err
 	}
 
-	req.Header.Add("Content-Type", contentType)
-	req.Header.Add("Accept", contentType)
-	return c.Do(req)
+	return c.Do(req, opts...)
 }
 
-func (c *client) Client() *http.Client {
+// Put builds and executes PUT request with provided options. Shortcut to Client.Do.
+func (c *Client) Put(ctx context.Context, requestURL string, body any, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodPut, body)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req, opts...)
+}
+
+// Patch builds and executes PATCH request with provided options. Shortcut to Client.Do.
+func (c *Client) Patch(ctx context.Context, requestURL string, body any, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodPatch, body)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req, opts...)
+}
+
+// Head builds and executes HEAD request with provided options. Shortcut to Client.Do.
+func (c *Client) Head(ctx context.Context, requestURL string, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodHead, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req, opts...)
+}
+
+// Options builds and executes OPTIONS request with provided options. Shortcut to Client.Do.
+func (c *Client) Options(ctx context.Context, requestURL string, body any, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodOptions, body)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req, opts...)
+}
+
+// Connect builds and executes GET request with provided options. Shortcut to Client.Do.
+func (c *Client) Connect(ctx context.Context, requestURL string, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodConnect, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req, opts...)
+}
+
+// Delete builds and executes DELETE request with provided options. Shortcut to Client.Do.
+func (c *Client) Delete(ctx context.Context, requestURL string, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodDelete, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req, opts...)
+}
+
+// Trace builds and executes TRACE request with provided options. Shortcut to Client.Do.
+func (c *Client) Trace(ctx context.Context, requestURL string, opts ...Option) (*Response, error) {
+	req, err := buildRequest(ctx, requestURL, http.MethodTrace, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return c.Do(req, opts...)
+}
+
+// Client returns reference to underlying http.Client instance.
+// This can be used for transferring control over http.Client options to the caller.
+func (c *Client) Client() *http.Client {
 	return c.client
 }
 
-func (c *client) SetCookies(cookieOrigin *url.URL, cookies []*http.Cookie) {
+// SetCookies set cookies for subsequent requests.
+func (c *Client) SetCookies(cookieOrigin *url.URL, cookies []*http.Cookie) {
 	if c.client.Jar == nil {
 		return
 	}
@@ -254,12 +192,16 @@ func (c *client) SetCookies(cookieOrigin *url.URL, cookies []*http.Cookie) {
 	c.client.Jar.SetCookies(cookieOrigin, cookies)
 }
 
-func (c *client) SetTransport(transport http.RoundTripper) {
+// SetTransport sets transport for underlying http.Client instance.
+func (c *Client) SetTransport(transport http.RoundTripper) {
 	c.client.Transport = transport
 }
 
-func doRequest(httpClient *http.Client, req *http.Request) (r *ClientResponse, err error) {
-	r = new(ClientResponse)
+func doRequest(httpClient *http.Client, req *http.Request, settings clientSettings) (*Response, error) {
+	var (
+		r   = new(Response)
+		err error
+	)
 
 	r.rawResp, err = httpClient.Do(req)
 	if err != nil {
@@ -272,60 +214,25 @@ func doRequest(httpClient *http.Client, req *http.Request) (r *ClientResponse, e
 		}
 	}(r.rawResp.Body)
 
-	reader, err := wrapWithCompressionReader(r.rawResp, req)
-	if err != nil {
-		return r, fmt.Errorf("unable to wrap response in compression reader: %w", err)
+	reader := r.rawResp.Body
+	if settings.decompressionEnabled {
+		reader, err = wrapWithCompressionReader(r.rawResp, req)
+		if err != nil {
+			return r, fmt.Errorf("unable to wrap response in compression reader: %w", err)
+		}
 	}
-	closer, ok := reader.(io.Closer)
-	if ok {
-		defer func(body io.Closer) {
-			closeErr := body.Close()
-			if closeErr != nil {
-				err = closeErr
-			}
-		}(closer)
-	}
+
+	defer func(body io.Closer) {
+		closeErr := body.Close()
+		if closeErr != nil {
+			err = closeErr
+		}
+	}(reader)
 
 	r.body, err = io.ReadAll(reader)
 	if err != nil {
 		return r, fmt.Errorf("failed to read response bytes: %w", err)
 	}
 
-	if Is4xx(r.rawResp.StatusCode) || Is5xx(r.rawResp.StatusCode) {
-		return r, newResponseError("got http response error code", r.rawResp.StatusCode)
-	}
-
 	return r, nil
-}
-
-func wrapWithCompressionReader(resp *http.Response, req *http.Request) (io.Reader, error) {
-	for _, mimeType := range req.Header.Values("Accept") {
-		switch strings.ToLower(mimeType) {
-		case AcceptGzipHeader:
-			return gzip.NewReader(resp.Body)
-
-		case AcceptDeflateHeader:
-			return flate.NewReader(resp.Body), nil
-
-		case AcceptTarHeader:
-			return tar.NewReader(resp.Body), nil
-
-		}
-	}
-
-	for _, encodingType := range resp.Header.Values("Content-Encoding") {
-		switch strings.ToLower(encodingType) {
-		case CompressionGzip:
-			return gzip.NewReader(resp.Body)
-
-		case CompressionDeflate:
-			return flate.NewReader(resp.Body), nil
-
-		case CompressionTar:
-			return tar.NewReader(resp.Body), nil
-
-		}
-	}
-
-	return resp.Body, nil
 }

@@ -2,26 +2,21 @@ package httpr
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 )
 
-type Response interface {
-	Bytes() []byte
-	Reader() io.Reader
-	String() string
-	StatusCode() int
-	Headers() map[string]string
-	Cookies() []*http.Cookie
-	RequestURL() string
-}
-
-type ClientResponse struct {
+// Response is a wrapper above standard http.Response objects, with some
+// convenience methods.
+type Response struct {
 	rawResp *http.Response
 	body    []byte
 }
 
-func (r *ClientResponse) Bytes() []byte {
+// Bytes returns byte slice representation of response body.
+func (r *Response) Bytes() []byte {
 	if r == nil || r.rawResp == nil || r.body == nil {
 		return []byte{}
 	}
@@ -29,7 +24,8 @@ func (r *ClientResponse) Bytes() []byte {
 	return r.body
 }
 
-func (r *ClientResponse) Reader() io.Reader {
+// Reader returns io.Reader.
+func (r *Response) Reader() io.Reader {
 	if r.rawResp == nil {
 		return bytes.NewReader([]byte{})
 	}
@@ -37,31 +33,39 @@ func (r *ClientResponse) Reader() io.Reader {
 	return bytes.NewReader(r.body)
 }
 
-func (r *ClientResponse) String() string {
+// String returns string representation of response body. If underlying response is nil,
+// returns an empty string.
+func (r *Response) String() string {
 	return string(r.Bytes())
 }
 
-func (r *ClientResponse) StatusCode() int {
-	if r.rawResp == nil {
+// StatusCode returns HTTP status code of underlying response. If response is nil,
+// returns 0.
+func (r *Response) StatusCode() int {
+	if r == nil || r.rawResp == nil {
 		return 0
 	}
 
 	return r.rawResp.StatusCode
 }
 
-func (r *ClientResponse) Headers() map[string]string {
+// Headers returns a map of headers.
+func (r *Response) Headers() map[string]string {
 	headers := make(map[string]string)
 	if r.rawResp == nil {
 		return headers
 	}
 
 	for key, values := range r.rawResp.Header {
-		headers[key] = values[0]
+		if len(values) > 0 {
+			headers[key] = values[0]
+		}
 	}
 	return headers
 }
 
-func (r *ClientResponse) Cookies() []*http.Cookie {
+// Cookies returns slice of response cookies.
+func (r *Response) Cookies() []*http.Cookie {
 	if r.rawResp == nil {
 		return nil
 	}
@@ -69,10 +73,30 @@ func (r *ClientResponse) Cookies() []*http.Cookie {
 	return r.rawResp.Cookies()
 }
 
-func (r *ClientResponse) RequestURL() string {
+// RequestURL returns request original URL.
+func (r *Response) RequestURL() string {
 	if r == nil || r.rawResp == nil {
 		return ""
 	}
 
 	return r.rawResp.Request.URL.String()
+}
+
+// JSON unmarshalls response JSON body and stores result
+// in values pointed by p.
+func (r *Response) JSON(p any) error {
+	if r == nil || r.body == nil {
+		return errors.New("response body is nil")
+	}
+
+	return json.Unmarshal(r.body, p)
+}
+
+// Raw returns reference to underlying http.Response object. Call to this method handles control
+// over original object to the caller.
+func (r *Response) Raw() *http.Response {
+	if r == nil {
+		return nil
+	}
+	return r.rawResp
 }

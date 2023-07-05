@@ -30,14 +30,14 @@ linters:
     - misspell
     - nilerr
     - nilnil
-#    - noctx
+    - noctx
     - nolintlint
     - prealloc
     - predeclared
     - reassign
-#    - revive
+    - revive
     - staticcheck
-#    - stylecheck
+    - stylecheck
     - tagliatelle
     - tenv
     - testableexamples
@@ -107,8 +107,3 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   new: false
-
-  exclude-rules:
-    - path: 'httpr\.go'
-      linters:
-        - gosec
